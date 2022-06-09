@@ -11,9 +11,11 @@ from sklearn.model_selection import train_test_split
 from scipy.special import logit
 from sklearn.neighbors import NearestNeighbors
 
-from catboost import Pool, CatBoostClassifier
+from catboost import CatBoostRegressor, Pool, CatBoostClassifier
 from catboost.utils import get_roc_curve
 from sklearn.metrics import auc
+from powershap import PowerShap
+
 
 
 def p_values_arg_coef(coefficients, arg):
@@ -146,18 +148,30 @@ class CausalTeShap():  # SelectorMixin, BaseEstimator):
         if self.verbose:
             print(*values)
 
-    def propensity_matching(
+    def find_confounders(
+        self,
+        X,
+        T,
+        index_ar = None,
+        RS = 42,
+    ):
+
+        selector = PowerShap(
+            model=CatBoostClassifier(n_estimators=250, verbose=0, use_best_model=True)
+        )
+
+        selector.fit(X, T)  # Fit the PowerShap feature selector
+        return selector.transform(X)  # Reduce the dataset to the selected features
+
+    
+    def propensity_training(
             self,
             X,
             y,
             T,
             index_ar=None,
-            stratify=None,
             RS=42,
-            one_to_one_matching=False,
-            multiple_exact=1,
     ):
-
         X = X.copy(deep=True)
 
         if index_ar is None:
@@ -167,7 +181,7 @@ class CausalTeShap():  # SelectorMixin, BaseEstimator):
             index_ar,
             test_size=0.9,
             random_state=RS,
-            stratify=stratify,
+            stratify=T,
         )
 
         X_train = X[np.isin(index_ar, train_idx)].copy(deep=True)
@@ -182,8 +196,9 @@ class CausalTeShap():  # SelectorMixin, BaseEstimator):
 
         propensity_class_balance = [
             T_train.sum()/len(T_train), 1-T_train.sum()/len(T_train)]
+
         propensity_model = CatBoostClassifier(
-            verbose=0, n_estimators=250, class_weights=propensity_class_balance)
+            verbose=0, n_estimators=500, class_weights=propensity_class_balance)
         propensity_model.fit(Pool(X_train, T_train))
 
         (fpr, tpr, thresholds) = get_roc_curve(
@@ -204,6 +219,28 @@ class CausalTeShap():  # SelectorMixin, BaseEstimator):
         T_train_proba = propensity_model.predict_proba(X)
         T_train_logit = np.array([logit(xi) for xi in T_train_proba[:, 1]])
         X_matching.loc[:, "propensity_score_logit"] = T_train_logit
+
+        return X_matching, propensity_model, T, prev_propensity_auc
+    
+    
+    def propensity_matching(
+            self,
+            X,
+            y,
+            T,
+            index_ar=None,
+            RS=42,
+            one_to_one_matching=False,
+            multiple_exact=1,
+    ):
+
+        X_matching, propensity_model, T, prev_propensity_auc = self.propensity_training(
+            X,
+            y,
+            T,
+            index_ar=index_ar,
+            RS=RS,
+        )
 
         T0_X_matching = X_matching[T == 0].copy(deep=True)
         T0_X_matching = T0_X_matching.reset_index(drop=True)
@@ -267,10 +304,179 @@ class CausalTeShap():  # SelectorMixin, BaseEstimator):
             T,
             id_split_ar=None,
             id_ar=None,
+            balance_treatment_groups=False,
+            propensity_matching=False,
+            one_to_one_matching=False,
+            multiple_exact=1,
+            stratify=None,
+            RS_loop = 42,
+            propensity_exclude_columns=[],
+    ):
+        if id_split_ar is not None:
+            train_idx, val_idx = train_test_split(
+                id_split_ar,
+                test_size=self.val_size,
+                random_state=RS_loop,
+                stratify=stratify,
+            )
+            if id_ar is None:
+                id_ar = id_split_ar
+
+            X_train = X[np.isin(id_ar, train_idx)].copy(deep=True)
+            y_train = y[np.isin(id_ar, train_idx)]
+            T_train = T[np.isin(id_ar, train_idx)]
+
+            train_idx = id_ar[np.isin(id_ar, train_idx)]
+            val_idx = id_ar[~np.isin(id_ar, train_idx)]
+
+        else:
+            train_idx, val_idx = train_test_split(
+                np.arange(len(X)),
+                test_size=self.val_size,
+                random_state=RS_loop,
+                stratify=stratify,
+            )
+            id_ar = np.arange(len(X))
+
+            X_train = X[np.isin(id_ar, train_idx)].copy(deep=True)
+            y_train = y[np.isin(id_ar, train_idx)]
+            T_train = T[np.isin(id_ar, train_idx)]
+
+        if propensity_matching:
+
+            propensity_idx, before_matching_auc, after_matching_auc = self.propensity_matching(
+                X_train.drop(columns=propensity_exclude_columns),
+                y_train,
+                T_train,
+                index_ar=train_idx,
+                one_to_one_matching=one_to_one_matching,
+                multiple_exact=multiple_exact,
+            )
+            X_train = X_train[np.isin(train_idx, propensity_idx)]
+            y_train = y_train[np.isin(train_idx, propensity_idx)]
+            T_train = T_train[np.isin(train_idx, propensity_idx)]
+
+        X_train_T0 = X_train[T_train == 0].copy(deep=True)
+        y_train_T0 = y_train[T_train == 0]
+
+        X_train_T1 = X_train[T_train == 1].copy(deep=True)
+        y_train_T1 = y_train[T_train == 1]
+
+        if self.S_learner=="S" and balance_treatment_groups:
+            if len(y_train_T0) <= len(y_train_T1):
+                T1_undersample_idx = np.arange(len(y_train_T1))
+                chosen_T1_undersample_idx = np.random.choice(T1_undersample_idx, size=len(
+                    y_train_T0), replace=False)
+
+                X_train_T1 = X_train_T1.iloc[chosen_T1_undersample_idx]
+                y_train_T1 = y_train_T1[chosen_T1_undersample_idx]
+            else:
+                T0_undersample_idx = np.arange(len(y_train_T0))
+                chosen_T0_undersample_idx = np.random.choice(T0_undersample_idx, size=len(
+                    y_train_T1), replace=False)
+
+                X_train_T0 = X_train_T0.iloc[chosen_T0_undersample_idx]
+                y_train_T0 = y_train_T0[chosen_T0_undersample_idx]
+
+        # y_train = pd.concat([y_train_T0,y_train_T1])
+        y_train = np.append(y_train_T0, y_train_T1)
+
+        if self.S_learner == "S":
+            X_train_T0["T"] = 0
+            X_train_T1["T"] = 1
+
+            X_train = pd.concat([X_train_T0, X_train_T1])
+
+            X_train_S_T0 = X_train.copy(deep=True)
+            X_train_S_T0["T"] = 0
+            X_train_S_T1 = X_train.copy(deep=True)
+            X_train_S_T1["T"] = 1
+
+            if self._classification:
+                class_balance = [y_train.sum()/len(y_train),
+                                1-y_train.sum()/len(y_train)]
+                causal_model = self.model(
+                    verbose=False, iterations=500, class_weights=class_balance)
+            else:
+                causal_model = self.model#(verbose=False, iterations=500)
+
+            causal_model.fit(X_train, y_train)
+
+            return causal_model
+
+        elif self.S_learner == "T":
+            if self._classification:
+                T0_class_balance = [
+                    y_train_T0.sum()/len(y_train_T0), 1-y_train_T0.sum()/len(y_train_T0)]
+                T0_causal_model = self.model(
+                    verbose=False, iterations=500, class_weights=T0_class_balance)
+            else:
+                T0_causal_model = self.model(verbose=False, iterations=500)
+            T0_causal_model.fit(X_train_T0, y_train_T0)
+
+            if self._classification:
+                T1_class_balance = [
+                    y_train_T1.sum()/len(y_train_T1), 1-y_train_T1.sum()/len(y_train_T1)]
+                T1_causal_model = self.model(
+                    verbose=False, iterations=500, class_weights=T1_class_balance)
+            else:
+                T1_causal_model = self.model(verbose=False, iterations=500)
+            T1_causal_model.fit(X_train_T1, y_train_T1)
+
+            return T1_causal_model, T0_causal_model
+
+        elif self.S_learner == "X":
+            if self._classification:
+                T0_class_balance = [
+                    y_train_T0.sum()/len(y_train_T0), 1-y_train_T0.sum()/len(y_train_T0)]
+                z_T0_causal_model = self.model(
+                    verbose=False, iterations=500, class_weights=T0_class_balance)
+
+                T0_causal_model = CatBoostRegressor(
+                    verbose=False, iterations=500, class_weights=T0_class_balance)
+            else:
+                z_T0_causal_model = self.model(verbose=False, iterations=500)
+                T0_causal_model = self.model(verbose=False, iterations=500)
+
+            z_T0_causal_model.fit(X_train_T0, y_train_T0)
+
+            if self._classification:
+                T1_class_balance = [
+                    y_train_T1.sum()/len(y_train_T1), 1-y_train_T1.sum()/len(y_train_T1)]
+                z_T1_causal_model = self.model(
+                    verbose=False, iterations=500, class_weights=T1_class_balance)
+
+                T1_causal_model = CatBoostRegressor(
+                    verbose=False, iterations=500, class_weights=T0_class_balance)
+            else:
+                z_T1_causal_model = self.model(verbose=False, iterations=500)
+                T1_causal_model = self.model(verbose=False, iterations=500)
+
+            z_T1_causal_model.fit(X_train_T1, y_train_T1)
+
+            if self._classification:
+                T0_causal_model.fit(X_train_T0, z_T1_causal_model.predict_proba(X_train_T0) - y_train_T0)
+                T1_causal_model.fit(X_train_T1, y_train_T1 - z_T0_causal_model.predict_proba(X_train_T1))
+            else:
+                T0_causal_model.fit(X_train_T0, z_T1_causal_model.predict(X_train_T0) - y_train_T0)
+                T1_causal_model.fit(X_train_T1, y_train_T1 - z_T0_causal_model.predict(X_train_T1))
+
+            return T1_causal_model, T0_causal_model
+
+    
+    def analyze(
+            self,
+            X,
+            y,
+            T,
+            id_split_ar=None,
+            id_ar=None,
+            balance_treatment_groups=False,
             balance_T_val=False,
             propensity_matching=False,
             one_to_one_matching=False,
             multiple_exact=1,
+            cate_percentage = False,
             stratify=None,
             propensity_exclude_columns=[],
     ):
@@ -281,8 +487,10 @@ class CausalTeShap():  # SelectorMixin, BaseEstimator):
         train_CATE_array = []
         val_CATE_array = []
 
-        #train_ATE_array = []
-        #val_ATE_array = []
+        self._cate_percentage = cate_percentage
+        if self._classification:
+            self._cate_percentage = True
+
 
         self._propensity_matching = propensity_matching
         if propensity_matching:
@@ -319,6 +527,7 @@ class CausalTeShap():  # SelectorMixin, BaseEstimator):
                 T_val = T[~np.isin(id_ar, train_idx)]
 
                 train_idx = id_ar[np.isin(id_ar, train_idx)]
+                val_idx = id_ar[~np.isin(id_ar, train_idx)]
 
             else:
                 train_idx, val_idx = train_test_split(
@@ -341,7 +550,7 @@ class CausalTeShap():  # SelectorMixin, BaseEstimator):
                                  ["random_uniform_feature"]),
                     y_train,
                     T_train,
-                    stratify=stratify,
+                    #stratify=stratify,
                     index_ar=train_idx,
                     one_to_one_matching=one_to_one_matching,
                     multiple_exact=multiple_exact,
@@ -354,6 +563,25 @@ class CausalTeShap():  # SelectorMixin, BaseEstimator):
                 after_matching_auc_arr += [after_matching_auc]
                 T_class_distribution += [[y_train[T_train == 0].sum()/len(y_train[T_train == 0]), len(
                     T_train[T_train == 0]), y_train[T_train == 1].sum()/len(y_train[T_train == 1]), (len(T_train[T_train == 1]))]]
+                
+                # propensity_idx, before_matching_auc, after_matching_auc = self.propensity_matching(
+                #     X_val.drop(columns=propensity_exclude_columns +
+                #                  ["random_uniform_feature"]).copy(deep=True),
+                #     y_val,
+                #     T_val,
+                #     index_ar=val_idx,
+                #     one_to_one_matching=one_to_one_matching,
+                #     multiple_exact=multiple_exact,
+                # )
+                # X_val = X_val[np.isin(val_idx, propensity_idx)]
+                # y_val = y_val[np.isin(val_idx, propensity_idx)]
+                # T_val = T_val[np.isin(val_idx, propensity_idx)]
+
+                # before_matching_auc_arr += [before_matching_auc]
+                # after_matching_auc_arr += [after_matching_auc]
+                # T_class_distribution += [[y_val[T_val == 0].sum()/len(y_val[T_val == 0]), len(
+                #     T_val[T_val == 0]), y_val[T_val == 1].sum()/len(y_val[T_val == 1]), (len(T_val[T_val == 1]))]]
+
 
             X_train_T0 = X_train[T_train == 0].copy(deep=True)
             y_train_T0 = y_train[T_train == 0]
@@ -402,12 +630,29 @@ class CausalTeShap():  # SelectorMixin, BaseEstimator):
                 y_val_T0 = np.append(
                     y_val_T0[y_val_T0 == 1-T0_label_undersample], y_val_T0[chosen_T0_undersample_idx])
 
+            if self.S_learner and balance_treatment_groups:
+                if len(y_train_T0) <= len(y_train_T1):
+                    T1_undersample_idx = np.arange(len(y_train_T1))
+                    chosen_T1_undersample_idx = np.random.choice(T1_undersample_idx, size=len(
+                        y_train_T0), replace=False)
+
+                    X_train_T1 = X_train_T1.iloc[chosen_T1_undersample_idx]
+                    y_train_T1 = y_train_T1[chosen_T1_undersample_idx]
+                else:
+                    T0_undersample_idx = np.arange(len(y_train_T0))
+                    chosen_T0_undersample_idx = np.random.choice(T0_undersample_idx, size=len(
+                        y_train_T1), replace=False)
+
+                    X_train_T0 = X_train_T0.iloc[chosen_T0_undersample_idx]
+                    y_train_T0 = y_train_T0[chosen_T0_undersample_idx]
+
+            
             y_val = np.append(y_val_T0, y_val_T1)
             X_val = pd.concat([X_val_T0, X_val_T1])
 
             y_train = np.append(y_train_T0, y_train_T1)
 
-            if self.S_learner:
+            if self.S_learner == "S":
                 X_train_T0["T"] = 0
                 X_train_T1["T"] = 1
 
@@ -429,9 +674,10 @@ class CausalTeShap():  # SelectorMixin, BaseEstimator):
                     class_balance = [y_train.sum()/len(y_train),
                                      1-y_train.sum()/len(y_train)]
                     causal_model = self.model(
-                        verbose=False, iterations=250, class_weights=class_balance)
+                        verbose=False, iterations=500, class_weights=class_balance)
                 else:
-                    causal_model = self.model(verbose=False, iterations=250)
+                    causal_model = self.model
+
                 causal_model.fit(X_train, y_train)
 
                 if self._classification:
@@ -440,34 +686,44 @@ class CausalTeShap():  # SelectorMixin, BaseEstimator):
                     val_CATE = causal_model.predict_proba(
                         X_val_S_T1)[:, 1]-causal_model.predict_proba(X_val_S_T0)[:, 1]
                 else:
-                    train_CATE = causal_model.predict(
-                        X_train_S_T1)-causal_model.predict(X_train_S_T0)
-                    val_CATE = causal_model.predict(
-                        X_val_S_T1)-causal_model.predict(X_val_S_T0)
+                    if self._cate_percentage:
+                        train_CATE = (causal_model.predict(
+                            X_train_S_T1)-causal_model.predict(X_train_S_T0))/y_train
+
+                        val_CATE = (causal_model.predict(
+                            X_val_S_T1)-causal_model.predict(X_val_S_T0))/y_val
+
+                    else:
+                        train_CATE = causal_model.predict(
+                            X_train_S_T1)-causal_model.predict(X_train_S_T0)
+                        val_CATE = causal_model.predict(
+                            X_val_S_T1)-causal_model.predict(X_val_S_T0)
+
+                    
 
                 causal_explainer = shap.TreeExplainer(causal_model)
                 T1_shap_values = causal_explainer.shap_values(X_val_S_T1)
                 T0_shap_values = causal_explainer.shap_values(X_val_S_T0)
 
-            else:
+            elif self.S_learner == "T":
                 X_train = pd.concat([X_train_T0, X_train_T1])
 
                 if self._classification:
                     T0_class_balance = [
                         y_train_T0.sum()/len(y_train_T0), 1-y_train_T0.sum()/len(y_train_T0)]
                     T0_causal_model = self.model(
-                        verbose=False, iterations=250, class_weights=T0_class_balance)
+                        verbose=False, iterations=500, class_weights=T0_class_balance)
                 else:
-                    T0_causal_model = self.model(verbose=False, iterations=250)
+                    T0_causal_model = self.model(verbose=False, iterations=500)
                 T0_causal_model.fit(X_train_T0, y_train_T0)
 
                 if self._classification:
                     T1_class_balance = [
                         y_train_T1.sum()/len(y_train_T1), 1-y_train_T1.sum()/len(y_train_T1)]
                     T1_causal_model = self.model(
-                        verbose=False, iterations=250, class_weights=T1_class_balance)
+                        verbose=False, iterations=500, class_weights=T1_class_balance)
                 else:
-                    T1_causal_model = self.model(verbose=False, iterations=250)
+                    T1_causal_model = self.model(verbose=False, iterations=500)
                 T1_causal_model.fit(X_train_T1, y_train_T1)
 
                 if self._classification:
@@ -480,6 +736,54 @@ class CausalTeShap():  # SelectorMixin, BaseEstimator):
                         X_train)-T0_causal_model.predict(X_train)
                     val_CATE = T1_causal_model.predict(
                         X_val)-T0_causal_model.predict(X_val)
+
+                T0_causal_explainer = shap.TreeExplainer(T0_causal_model)
+                T1_causal_explainer = shap.TreeExplainer(T1_causal_model)
+
+                T1_shap_values = T0_causal_explainer.shap_values(X_val)
+                T0_shap_values = T1_causal_explainer.shap_values(X_val)
+
+            elif self.S_learner == "X":
+                if self._classification:
+                    T0_class_balance = [
+                        y_train_T0.sum()/len(y_train_T0), 1-y_train_T0.sum()/len(y_train_T0)]
+                    z_T0_causal_model = self.model(
+                        verbose=False, iterations=500, class_weights=T0_class_balance)
+
+                    T0_causal_model = CatBoostRegressor(
+                        verbose=False, iterations=500, class_weights=T0_class_balance)
+                else:
+                    z_T0_causal_model = self.model(verbose=False, iterations=500)
+                    T0_causal_model = self.model(verbose=False, iterations=500)
+
+                z_T0_causal_model.fit(X_train_T0, y_train_T0)
+
+                if self._classification:
+                    T1_class_balance = [
+                        y_train_T1.sum()/len(y_train_T1), 1-y_train_T1.sum()/len(y_train_T1)]
+                    z_T1_causal_model = self.model(
+                        verbose=False, iterations=500, class_weights=T1_class_balance)
+
+                    T1_causal_model = CatBoostRegressor(
+                        verbose=False, iterations=500, class_weights=T0_class_balance)
+                else:
+                    z_T1_causal_model = self.model(verbose=False, iterations=500)
+                    T1_causal_model = self.model(verbose=False, iterations=500)
+
+                z_T1_causal_model.fit(X_train_T1, y_train_T1)
+
+                if self._classification:
+                    T0_causal_model.fit(X_train_T0, z_T1_causal_model.predict_proba(X_train_T0) - y_train_T0)
+                    T1_causal_model.fit(X_train_T1, y_train_T1 - z_T0_causal_model.predict_proba(X_train_T1))
+                else:
+                    T0_causal_model.fit(X_train_T0, z_T1_causal_model.predict(X_train_T0) - y_train_T0)
+                    T1_causal_model.fit(X_train_T1, y_train_T1 - z_T0_causal_model.predict(X_train_T1))
+
+                
+                train_CATE = 0.5*T1_causal_model.predict(
+                    X_train)+0.5*T0_causal_model.predict(X_train)
+                val_CATE = 0.5*T1_causal_model.predict(
+                    X_val)-0.5*T0_causal_model.predict(X_val)
 
                 T0_causal_explainer = shap.TreeExplainer(T0_causal_model)
                 T1_causal_explainer = shap.TreeExplainer(T1_causal_model)
@@ -592,10 +896,16 @@ class CausalTeShap():  # SelectorMixin, BaseEstimator):
         if val_p_value > 0.5:
             val_p_value = 1-val_p_value
 
-        print("TRAIN: \t CATE = " + str(np.mean(train_means)) +
-              " \t| p-value = "+str(train_p_value))
-        print("VAL: \t CATE = " + str(np.mean(val_means)) +
-              " \t| p-value = "+str(val_p_value))
+        if self._cate_percentage:
+            print("TRAIN: \t CATE = " + str(np.round(np.mean(train_means)*100,4)) +
+                " % \t| p-value = "+str(train_p_value))
+            print("VAL: \t CATE = " + str(np.round(np.mean(val_means)*100,4)) +
+                " % \t| p-value = "+str(val_p_value))
+        else:
+            print("TRAIN: \t CATE = " + str(np.mean(train_means)) +
+                " \t| p-value = "+str(train_p_value))
+            print("VAL: \t CATE = " + str(np.mean(val_means)) +
+                " \t| p-value = "+str(val_p_value))
         print(60*"=")
 
         if include_all:
