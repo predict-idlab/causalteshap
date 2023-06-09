@@ -1,1 +1,5 @@
 __pycache__/causalteshap.cpython-38.pyc
+Datasets/
+catboost_info/
+__pycache__/
+results/
