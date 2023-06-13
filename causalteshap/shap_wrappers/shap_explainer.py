@@ -203,8 +203,8 @@ class CatboostExplainer(ShapExplainer):
     def _fit_get_shap(
         self, X_train, Y_train, X_val, Y_val, random_seed, meta_learner, **kwargs
     ) -> np.array:
+        
         # Fit the model
-
         if meta_learner == "S":
             S_model = self.model.copy().set_params(random_seed=random_seed)
             S_model.fit(X_train, Y_train, eval_set=(X_val, Y_val))
@@ -255,7 +255,10 @@ class CatboostExplainer(ShapExplainer):
 
             return T1_explainer.shap_values(X_do1), T0_explainer.shap_values(X_do0)
         
-        return 
+        else:
+            raise NotImplementedError 
+        
+
 
     def _get_more_tags(self):
         return {"allow_nan": True}
@@ -330,8 +333,10 @@ class LGBMExplainer(ShapExplainer):
             T0_explainer = shap.TreeExplainer(T0_model)
 
             return T1_explainer.shap_values(X_do1), T0_explainer.shap_values(X_do0)
-         
-        return
+        
+        else:
+            raise NotImplementedError 
+        
 
     def _get_more_tags(self):
         return {"allow_nan": True}
@@ -405,7 +410,8 @@ class EnsembleExplainer(ShapExplainer):
 
             return T1_explainer.shap_values(X_do1), T0_explainer.shap_values(X_do0)
         
-        return
+        else:
+            raise NotImplementedError 
 
 ### LINEAR
 
@@ -493,7 +499,8 @@ class LinearExplainer(ShapExplainer):
 
             return T1_explainer.shap_values(X_do1), T0_explainer.shap_values(X_do0)
         
-        return
+        else:
+            raise NotImplementedError 
 
 
 ### DEEP LEARNING

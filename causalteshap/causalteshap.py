@@ -75,6 +75,9 @@ class CausalteShap(SelectorMixin, BaseEstimator):
         show_progress: bool, optional
             Flag indicating whether progress of the powershap iterations should be
             shown. By default True.
+        meta_learner: str, optional
+            A string that will determine which meta-learner will be used for causalteshap. 
+            Current options: S, T, X, R 
         candidate_convergence: bool, optional
             Causalteshap will execute multiple times until all features are candidates. 
             This is to remove potential prognostic features and reduce the complexity of 
@@ -267,6 +270,8 @@ class CausalteShap(SelectorMixin, BaseEstimator):
 
             #Keep executing until there are only candidates left
             while analysis_df.candidate.sum() < current_len_features_X:
+                self._print("Starting candidate convergence.")
+
                 current_len_features_X = analysis_df.candidate.sum()
 
                 #rerun causalteshap with the new features
