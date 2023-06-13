@@ -262,20 +262,20 @@ class CausalteShap(SelectorMixin, BaseEstimator):
         # It is convention to return self
         return self
 
+    def get_predictive(self):
+        return self._analysis_df[self._analysis_df.predictive==1.0].index.values
+    
+    def get_candidate_predictive(self):
+        return self._analysis_df[self._analysis_df.candidate==1.0].index.values
+
+    def get_analysis_df(self):
+        return self._analysis_df.sort_values(["ttest","ks-statistic"])
+    
     # This is the only method that needs to be implemented to serve the transform
     # functionality
     def _get_support_mask(self):
         # Select the significant features
-        return self._analysis_df[self._analysis_df.predictive==1].index.values
-
-    def get_predictive(self):
-        return self._analysis_df[self._analysis_df.predictive==1].index.values
-    
-    def get_candidate_predictive(self):
-        return self._analysis_df[self._analysis_df.candidate==1].index.values
-
-    def get_analysis_df(self):
-        return self._analysis_df.sort_values(["ttest","ks-statistic"])
+        return self.get_predictive()
 
     def transform(self, X):
         check_is_fitted(self, ["_analysis_df", "_explainer"])
