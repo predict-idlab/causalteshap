@@ -30,6 +30,7 @@ class CausalteShap(SelectorMixin, BaseEstimator):
         show_progress: bool = True,
         verbose: bool = False,
         meta_learner: str = "S",
+        candidate_convergence: bool = False,
         **fit_kwargs,
     ):
         """
@@ -74,6 +75,10 @@ class CausalteShap(SelectorMixin, BaseEstimator):
         show_progress: bool, optional
             Flag indicating whether progress of the powershap iterations should be
             shown. By default True.
+        candidate_convergence: bool, optional
+            Causalteshap will execute multiple times until all features are candidates. 
+            This is to remove potential prognostic features and reduce the complexity of 
+            the problem
         verbose: bool, optional
             Flag indicating whether verbose console output should be shown. By default
             False.
@@ -92,6 +97,7 @@ class CausalteShap(SelectorMixin, BaseEstimator):
         self.verbose = verbose
         self.fit_kwargs = fit_kwargs
         self.meta_learner = meta_learner
+        self.candidate_convergence = candidate_convergence
 
         def _infinite_splitter(cv):
             """Infinite yields for the given splitter.
@@ -151,13 +157,16 @@ class CausalteShap(SelectorMixin, BaseEstimator):
     def _log_feature_names_sklean_v0(self, X):
         """Log the feature names if we have sklearn 0.x"""
         assert sklearn.__version__.startswith("0.")
-        feature_names = np.asarray(X.columns) if hasattr(X, "columns") else None
+        feature_names = np.asarray(
+            X.columns) if hasattr(X, "columns") else None
         if feature_names is not None and len(feature_names) > 0:
             # Check if all feature names of type string
-            types = sorted(t.__qualname__ for t in set(type(v) for v in feature_names))
+            types = sorted(t.__qualname__ for t in set(type(v)
+                           for v in feature_names))
             if len(types) > 1 or types[0] != "str":
                 feature_names = None
-                warnings.warn("Feature names only support names that are all strings.", UserWarning)
+                warnings.warn(
+                    "Feature names only support names that are all strings.", UserWarning)
 
         if feature_names is not None and len(feature_names) > 0:
             self.feature_names_in_ = feature_names
@@ -225,7 +234,8 @@ class CausalteShap(SelectorMixin, BaseEstimator):
         #
         # If this is changed in some way which would allow explain() to mutate
         # the original data, it should cause the data mutation tests to fail.
-        X, y = self._explainer._validate_data(self._validate_data, X, y, multi_output=True)
+        X, y = self._explainer._validate_data(
+            self._validate_data, X, y, multi_output=True)
         X = pd.DataFrame(data=X, columns=list(range(X.shape[1])))
 
         self._print("Starting causalteshap")
@@ -244,33 +254,70 @@ class CausalteShap(SelectorMixin, BaseEstimator):
         )
 
         analysis_df = causalteshap_analysis(
-            T1_matrix_list=shaps_do1, T0_matrix_list=shaps_do0, significance_factor=self.significance_factor,verbose=self.verbose
+            T1_matrix_list=shaps_do1, T0_matrix_list=shaps_do0, significance_factor=self.significance_factor, verbose=self.verbose
         )
 
-        self._print("Done!")
+        if self.candidate_convergence:
+            # Check whether there are features that are outputted as prognostic and rerun causaliteshap
+            current_len_features_X = np.shape(X)[1]
 
-        ## Store the processed_shaps_df in the object
+            #First allocate the columns to a separate array to query from later, as the indices of analysis_df get reset after every causalteshap_analysis
+            #This way we can query the correct columns which can be used later to fix the names
+            new_columns = X.columns.values[analysis_df[analysis_df.candidate == 1.0].index.values]
+
+            #Keep executing until there are only candidates left
+            while analysis_df.candidate.sum() < current_len_features_X:
+                current_len_features_X = analysis_df.candidate.sum()
+
+                #rerun causalteshap with the new features
+                shaps_do1, shaps_do0 = self._explainer.explain(
+                    X=X[new_columns],
+                    T=T,
+                    y=y,
+                    val_size=self.val_size,
+                    stratify=stratify,
+                    groups=groups,
+                    cv_split=self.cv,  # pass the wrapped cv split function
+                    show_progress=self.show_progress,
+                    meta_learner=self.meta_learner,
+                    **kwargs,
+                )
+
+                analysis_df = causalteshap_analysis(
+                    T1_matrix_list=shaps_do1, T0_matrix_list=shaps_do0, significance_factor=self.significance_factor, verbose=self.verbose
+                )
+
+                #Find the new column list that are candidates
+                new_columns = new_columns[analysis_df[analysis_df.candidate == 1.0].index.values]
+
+            #Transform the indices of analysis_df to match with the original df
+            analysis_df.index = new_columns
+
+        self._print("Done!")
+        
+        # Store the processed_shaps_df in the object
         self._analysis_df = analysis_df
 
-        ## Store the processed_shaps_df in the object
+        # Store the processed_shaps_df in the object
         if hasattr(self, "feature_names_in_"):
             self._analysis_df.index = [
                 self.feature_names_in_[i] if isinstance(i, np.int64) else i
                 for i in analysis_df.index.values
             ]
+
         
         # It is convention to return self
         return self
 
     def get_predictive(self):
-        return self._analysis_df[self._analysis_df.predictive==1.0].index.values
-    
+        return self._analysis_df[self._analysis_df.predictive == 1.0].index.values
+
     def get_candidate_predictive(self):
-        return self._analysis_df[self._analysis_df.candidate==1.0].index.values
+        return self._analysis_df[self._analysis_df.candidate == 1.0].index.values
 
     def get_analysis_df(self):
-        return self._analysis_df.sort_values(["ttest","ks-statistic"])
-    
+        return self._analysis_df.sort_values(["ttest", "ks-statistic"])
+
     # This is the only method that needs to be implemented to serve the transform
     # functionality
     def _get_support_mask(self):
