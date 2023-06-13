@@ -29,6 +29,7 @@ class CausalteShap(SelectorMixin, BaseEstimator):
         cv: BaseCrossValidator = None,
         show_progress: bool = True,
         verbose: bool = False,
+        meta_learner: str = "S",
         **fit_kwargs,
     ):
         """
@@ -90,6 +91,7 @@ class CausalteShap(SelectorMixin, BaseEstimator):
         self.show_progress = show_progress
         self.verbose = verbose
         self.fit_kwargs = fit_kwargs
+        self.meta_learner = meta_learner
 
         def _infinite_splitter(cv):
             """Infinite yields for the given splitter.
@@ -237,7 +239,7 @@ class CausalteShap(SelectorMixin, BaseEstimator):
             groups=groups,
             cv_split=self.cv,  # pass the wrapped cv split function
             show_progress=self.show_progress,
-            meta_learner="S",
+            meta_learner=self.meta_learner,
             **kwargs,
         )
 
@@ -252,11 +254,11 @@ class CausalteShap(SelectorMixin, BaseEstimator):
 
         ## Store the processed_shaps_df in the object
         if hasattr(self, "feature_names_in_"):
-            self._processed_shaps_df.index = [
-                self.feature_names_in_[i] if isinstance(i, int) else i
+            self._analysis_df.index = [
+                self.feature_names_in_[i] if isinstance(i, np.int64) else i
                 for i in analysis_df.index.values
             ]
-
+        
         # It is convention to return self
         return self
 
@@ -273,7 +275,7 @@ class CausalteShap(SelectorMixin, BaseEstimator):
         return self._analysis_df[self._analysis_df.candidate==1].index.values
 
     def get_analysis_df(self):
-        return self._analysis_df
+        return self._analysis_df.sort_values(["ttest","ks-statistic"])
 
     def transform(self, X):
         check_is_fitted(self, ["_analysis_df", "_explainer"])

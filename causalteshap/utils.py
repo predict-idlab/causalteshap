@@ -43,11 +43,22 @@ def causalteshap_analysis(
 
     for i in range(len_features-2):
 
-        _, cdf1, cdf2, _ = cumsum_kstest(
+        data_all, cdf1, cdf2, _ = cumsum_kstest(
             np.abs(pred_matrix_list[:-1,i])-np.abs(pred_matrix_list[:-1,-1]),
             np.abs(pred_matrix_list[1:,-1])-np.abs(pred_matrix_list[:-1,-1]),
         )
 
+        #######################################################################################################################################
+        # import matplotlib.pyplot as plt
+
+        # plt.figure()
+        # plt.plot(data_all, cdf1,label="tested")
+        # plt.plot(data_all, cdf2,label="random")
+        # plt.legend()
+        # plt.grid()
+        #######################################################################################################################################
+
+        
         calculated_D_ks = np.max(np.abs((cdf1 - cdf2)[cdf1 - cdf2 >= 0 ]))
         n_samples = len(np.abs(pred_matrix_list[:-1,i]))
         comp_D_ks = np.sqrt(n_samples)*calculated_D_ks
@@ -61,6 +72,32 @@ def causalteshap_analysis(
                 equal_var = False
             )[1],3
             )
+        
+        #######################################################################################################################################
+        # import matplotlib.pyplot as plt
+
+        # plot_bins = 100#100
+        
+        # plot_1_max = np.max(np.abs(pred_matrix_list[:-1,i])-np.abs(pred_matrix_list[:-1,-1]))
+        # plot_1_min = np.min(np.abs(pred_matrix_list[1:,-1])-np.abs(pred_matrix_list[:-1,-1]))
+
+        # fig, axs = plt.subplots(1,2,figsize=(20,6))
+        # axs[0].hist(np.abs(pred_matrix_list[:-1,i])-np.abs(pred_matrix_list[:-1,-1]),label="tested",bins=np.arange(plot_1_min,plot_1_max,(plot_1_max-plot_1_min)/plot_bins),density=True)
+        # axs[0].hist(np.abs(pred_matrix_list[1:,-1])-np.abs(pred_matrix_list[:-1,-1]),label="random_subtr",alpha=0.5,bins=np.arange(plot_1_min,plot_1_max,(plot_1_max-plot_1_min)/plot_bins),density=True)
+        # axs[0].legend()
+        # axs[0].set_title("Random subtr vs tested subtr | condition = "+str(comp_D_ks))    
+
+        # # array_feature = np.append(np.append(array_tested[0],array_random[0]),[1 if feature_set_pred[i] in predictive_vars else 0])
+        # # hist_dataset_df = pd.concat([hist_dataset_df,pd.DataFrame([array_feature],columns=colum_features)])
+
+        # plot_2_max = np.max(np.abs(T1_matrix_list[:,i]))
+        # plot_2_min = np.min(np.abs(T0_matrix_list[:,i]))
+
+        # axs[1].hist(np.abs(T1_matrix_list[:,i]),label="T1",bins=np.arange(plot_2_min,plot_2_max,(plot_2_max-plot_2_min)/plot_bins))
+        # axs[1].hist(np.abs(T0_matrix_list[:,i]),label="T0",alpha=0.5,bins=np.arange(plot_2_min,plot_2_max,(plot_2_max-plot_2_min)/plot_bins))
+        # axs[1].legend()
+        # axs[1].set_title("T1 vs T0 (abs) | p_value = "+str(p_value_ttest))
+        #######################################################################################################################################
 
         if i == len_features-1:
             if comp_D_ks < condition:
@@ -76,6 +113,7 @@ def causalteshap_analysis(
                 and p_value_ttest <= significance_factor
                 ):
                 predictive_vars = np.append(predictive_vars,i)
+                concat_df_results_series = pd.DataFrame(data=[[comp_D_ks,p_value_ttest,1,1]],columns=["ks-statistic","ttest","predictive","candidate"])
 
             elif p_value_ttest <= significance_factor:
 
@@ -93,4 +131,4 @@ def causalteshap_analysis(
             print("p-value (current ttest): "+str(p_value_ttest))
             print(10*"-")
 
-    return analysis_df
+    return analysis_df.reset_index(drop=True)
