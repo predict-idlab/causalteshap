@@ -110,6 +110,8 @@ class ShapExplainer(ABC):
         X["T"] = T
         X["random_uniform_feature"] = random_uniform_feature
 
+        # y = y + (np.quantile(y,0.95) - np.quantile(y,0.05))*0.05*random_uniform_feature
+
         # Perform train-test split
         if groups is None:
             # stratify may be None or not None
@@ -209,15 +211,11 @@ class CatboostExplainer(ShapExplainer):
             S_model = self.model.copy().set_params(random_seed=random_seed)
             S_model.fit(X_train, Y_train, eval_set=(X_val, Y_val))
 
-            npRandomState_ran_feature = RandomState(random_seed)
-
             X_do1 = X_val.copy(deep=True)
             X_do1.loc[:,"T"] = 1
-            X_do1.loc[:,"random_uniform_feature"] = npRandomState_ran_feature.uniform(-1,1,len(X_val))
 
             X_do0 = X_val.copy(deep=True)
             X_do0.loc[:,"T"] = 0
-            X_do0.loc[:,"random_uniform_feature"] = npRandomState_ran_feature.uniform(-1,1,len(X_val))
 
             # Calculate the shap values
             C_explainer = shap.TreeExplainer(S_model)
@@ -241,13 +239,8 @@ class CatboostExplainer(ShapExplainer):
                          Y_train[T0_train_mask], 
                          eval_set=(X_val[T0_val_mask].drop(columns=["T"]), Y_val[T0_val_mask]))
 
-            npRandomState_ran_feature = RandomState(random_seed+1)
-
             X_do1 = X_val.drop(columns=["T"]).copy(deep=True)
-            X_do1.loc[:,"random_uniform_feature"] = npRandomState_ran_feature.uniform(-1,1,len(X_val))
-
             X_do0 = X_val.drop(columns=["T"]).copy(deep=True)
-            X_do0.loc[:,"random_uniform_feature"] = npRandomState_ran_feature.uniform(-1,1,len(X_val))
 
             # Calculate the shap values
             T1_explainer = shap.TreeExplainer(T1_model)
@@ -288,18 +281,15 @@ class LGBMExplainer(ShapExplainer):
             S_model = copy(self.model).set_params(random_seed=random_seed)
             S_model.fit(X_train, Y_train, eval_set=(X_val, Y_val))
 
-            npRandomState_ran_feature = RandomState(random_seed+1)
-
             X_do1 = X_val.copy(deep=True)
             X_do1.loc[:,"T"] = 1
-            X_do1.loc[:,"random_uniform_feature"] = npRandomState_ran_feature.uniform(-1,1,len(X_val))
 
             X_do0 = X_val.copy(deep=True)
             X_do0.loc[:,"T"] = 0
-            X_do0.loc[:,"random_uniform_feature"] = npRandomState_ran_feature.uniform(-1,1,len(X_val))
 
             # Calculate the shap values
-            C_explainer = shap.TreeExplainer(S_model)
+            # C_explainer = shap.TreeExplainer(S_model)
+            C_explainer = shap.TreeExplainer(S_model,data=X_do0,feature_perturbation="interventional")
 
             return C_explainer.shap_values(X_do1), C_explainer.shap_values(X_do0)
         
@@ -320,13 +310,8 @@ class LGBMExplainer(ShapExplainer):
                          Y_train[T0_train_mask], 
                          eval_set=(X_val[T0_val_mask].drop(columns=["T"]), Y_val[T0_val_mask]))
 
-            npRandomState_ran_feature = RandomState(random_seed+1)
-
             X_do1 = X_val.drop(columns=["T"]).copy(deep=True)
-            X_do1.loc[:,"random_uniform_feature"] = npRandomState_ran_feature.uniform(-1,1,len(X_val))
-
             X_do0 = X_val.drop(columns=["T"]).copy(deep=True)
-            X_do0.loc[:,"random_uniform_feature"] = npRandomState_ran_feature.uniform(-1,1,len(X_val))
 
             # Calculate the shap values
             T1_explainer = shap.TreeExplainer(T1_model)
@@ -368,15 +353,11 @@ class EnsembleExplainer(ShapExplainer):
             S_model = clone(self.model).set_params(random_state=random_seed)
             S_model.fit(X_train, Y_train)
 
-            npRandomState_ran_feature = RandomState(random_seed+1)
-
             X_do1 = X_val.copy(deep=True)
             X_do1.loc[:,"T"] = 1
-            X_do1.loc[:,"random_uniform_feature"] = npRandomState_ran_feature.uniform(-1,1,len(X_val))
 
             X_do0 = X_val.copy(deep=True)
             X_do0.loc[:,"T"] = 0
-            X_do0.loc[:,"random_uniform_feature"] = npRandomState_ran_feature.uniform(-1,1,len(X_val))
 
             # Calculate the shap values
             C_explainer = shap.TreeExplainer(S_model)
@@ -396,13 +377,8 @@ class EnsembleExplainer(ShapExplainer):
             T0_model.fit(X_train[T0_train_mask].drop(columns=["T"]), 
                          Y_train[T0_train_mask])
 
-            npRandomState_ran_feature = RandomState(random_seed+1)
-
             X_do1 = X_val.drop(columns=["T"]).copy(deep=True)
-            X_do1.loc[:,"random_uniform_feature"] = npRandomState_ran_feature.uniform(-1,1,len(X_val))
-
             X_do0 = X_val.drop(columns=["T"]).copy(deep=True)
-            X_do0.loc[:,"random_uniform_feature"] = npRandomState_ran_feature.uniform(-1,1,len(X_val))
 
             # Calculate the shap values
             T1_explainer = shap.TreeExplainer(T1_model)
@@ -445,15 +421,11 @@ class LinearExplainer(ShapExplainer):
 
             S_model.fit(X_train, Y_train)
 
-            npRandomState_ran_feature = RandomState(random_seed+1)
-
             X_do1 = X_val.copy(deep=True)
             X_do1.loc[:,"T"] = 1
-            X_do1.loc[:,"random_uniform_feature"] = npRandomState_ran_feature.uniform(-1,1,len(X_val))
 
             X_do0 = X_val.copy(deep=True)
             X_do0.loc[:,"T"] = 0
-            X_do0.loc[:,"random_uniform_feature"] = npRandomState_ran_feature.uniform(-1,1,len(X_val))
 
             # Calculate the shap values
             C_explainer = shap.TreeExplainer(S_model)
@@ -479,19 +451,12 @@ class LinearExplainer(ShapExplainer):
             T0_model.fit(X_train[T0_train_mask].drop(columns=["T"]), 
                          Y_train[T0_train_mask])
 
-            npRandomState_ran_feature = RandomState(random_seed+1)
 
             X_train_do1 = X_train.drop(columns=["T"]).copy(deep=True)
-            X_train_do1.loc[:,"random_uniform_feature"] = npRandomState_ran_feature.uniform(-1,1,len(X_train))
-            
             X_do1 = X_val.drop(columns=["T"]).copy(deep=True)
-            X_do1.loc[:,"random_uniform_feature"] = npRandomState_ran_feature.uniform(-1,1,len(X_val))
 
             X_train_do0 = X_train.drop(columns=["T"]).copy(deep=True)
-            X_train_do0.loc[:,"random_uniform_feature"] = npRandomState_ran_feature.uniform(-1,1,len(X_train))
-
             X_do0 = X_val.drop(columns=["T"]).copy(deep=True)
-            X_do0.loc[:,"random_uniform_feature"] = npRandomState_ran_feature.uniform(-1,1,len(X_val))
 
             # Calculate the shap values
             T1_explainer = shap.explainers.Linear(T1_model, X_train_do1)

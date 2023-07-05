@@ -307,21 +307,24 @@ class CausalteShap(SelectorMixin, BaseEstimator):
         if hasattr(self, "feature_names_in_"):
             self._analysis_df.index = [
                 self.feature_names_in_[i] if isinstance(i, np.int64) else i
-                for i in analysis_df.index.values
-            ]
+                for i in analysis_df.index.values[:]
+            ]#+["T","random_feature"]
 
         
         # It is convention to return self
         return self
 
     def get_predictive(self):
-        return self._analysis_df[self._analysis_df.predictive == 1.0].index.values
+        return list(self._analysis_df[self._analysis_df.predictive == 1.0].index.values)
 
     def get_candidate_predictive(self):
-        return self._analysis_df[self._analysis_df.candidate == 1.0].index.values
+        return list(self._analysis_df[self._analysis_df.candidate == 1.0].index.values)
 
-    def get_analysis_df(self):
-        return self._analysis_df.sort_values(["ttest", "ks-statistic"])
+    def get_analysis_df(self, sort_output = True):
+        if sort_output:
+            return self._analysis_df.sort_values(["predictive","candidate"],ascending=False)
+        else:
+            return self._analysis_df
 
     # This is the only method that needs to be implemented to serve the transform
     # functionality
