@@ -37,7 +37,6 @@ def causalteshap_analysis(
     significance_factor: float,
     verbose: bool
 ):
-    # pred_matrix_list = np.abs(T1_matrix_list) - np.abs(T0_matrix_list)
     pred_matrix_list = T1_matrix_list - T0_matrix_list
 
     predictive_vars = np.array([])
@@ -56,7 +55,7 @@ def causalteshap_analysis(
     # shap.summary_plot(np.abs(pred_matrix_list[:]))
     # shap.force_plot(10,T1_matrix_list[0,:],[0,0,1,0])
 
-    for i in range(len_features-2):
+    for i in range(len_features-1):
 
         data_all, cdf1, cdf2, _ = cumsum_kstest(
             np.abs(pred_matrix_list[:, i]),
@@ -80,26 +79,16 @@ def causalteshap_analysis(
         comp_D_ks = np.sqrt(n_samples)*calculated_D_ks
         condition = np.sqrt(-0.5*np.log(1-significance_factor))
 
-        # p_value_ttest = np.round(
-        #     st.ttest_ind(
-        #         # np.abs(T1_matrix_list[:, i]),
-        #         # np.abs(T0_matrix_list[:, i]),
-        #         T1_matrix_list[:, i],
-        #         T0_matrix_list[:, i],
-        #         alternative='two-sided',
-        #         equal_var=False
-        #     )[1], 3
-        # )
-
         p_value_ttest = np.round(
             st.ttest_ind(
                 T1_matrix_list[:, i],
                 T0_matrix_list[:, i],
                 alternative='two-sided',
-                equal_var=True
+                equal_var=False
             )[1], 3) 
+
         p_value_fligner = np.round(
-            st.fligner(
+            st.levene(
                 T1_matrix_list[:, i],
                 T0_matrix_list[:, i],
             )[1], 3
@@ -149,7 +138,7 @@ def causalteshap_analysis(
                 np.min(
                     np.append(T1_matrix_list[:, i], 
                         T0_matrix_list[:, i])
-                )
+                )+0.00001
             )
         ) 
         abs_mean_T1_minus_T0 = np.mean(
@@ -166,7 +155,7 @@ def causalteshap_analysis(
                 np.min(
                     np.append(np.abs(T1_matrix_list[:, i]), 
                         np.abs(T0_matrix_list[:, i]))
-                )
+                )+0.00001
             )
         ) 
 

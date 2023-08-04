@@ -110,8 +110,6 @@ class ShapExplainer(ABC):
         X["T"] = T
         X["random_uniform_feature"] = random_uniform_feature
 
-        # y = y + (np.quantile(y,0.95) - np.quantile(y,0.05))*0.05*random_uniform_feature
-
         # Perform train-test split
         if groups is None:
             # stratify may be None or not None

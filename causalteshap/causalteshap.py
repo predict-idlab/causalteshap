@@ -307,8 +307,8 @@ class CausalteShap(SelectorMixin, BaseEstimator):
         if hasattr(self, "feature_names_in_"):
             self._analysis_df.index = [
                 self.feature_names_in_[i] if isinstance(i, np.int64) else i
-                for i in analysis_df.index.values[:]
-            ]#+["T","random_feature"]
+                for i in analysis_df.index.values[:-1]
+            ]+["T"]#,"random_feature"]
 
         
         # It is convention to return self
