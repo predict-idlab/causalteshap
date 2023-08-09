@@ -1,7 +1,7 @@
 	
 <p align="center">
     <a href="#readme">
-        <img alt="Causalteshap logo" src="https://raw.githubusercontent.com/predict-idlab/causalteshap/main/causalteshap_logo.PNG" width=70%>
+        <img alt="Causalteshap logo" src="https://github.com/predict-idlab/causalteshap/blob/main/causalteshap_logo.PNG" width=70%>
     </a>
 </p>
 
