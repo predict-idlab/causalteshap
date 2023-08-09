@@ -1,4 +1,10 @@
-# Causalteshap
+	
+<p align="center">
+    <a href="#readme">
+        <img alt="Causalteshap logo" src="https://raw.githubusercontent.com/predict-idlab/causalteshap/main/causalteshap_logo.PNG" width=70%>
+    </a>
+</p>
+
 
 > *causalteshap* is a **treatment effect analysis** method that uses statistical hypothesis testing on **Shapley values** to find predictive and prognostic features.  
 
