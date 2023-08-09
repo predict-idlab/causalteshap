@@ -1,6 +1,6 @@
 # Causalteshap
 
-> *causalteshap* is a **feature selection method** that uses statistical hypothesis testing and power calculations on **Shapley values**, enabling fast and intuitive wrapper-based feature selection.  
+> *causalteshap* is a **treatment effect analysis** method that uses statistical hypothesis testing on **Shapley values** to find predictive and prognostic features.  
 
 ## Installation ⚙️
 
