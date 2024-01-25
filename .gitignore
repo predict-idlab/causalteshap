@@ -3,4 +3,10 @@ Datasets/ITErpretability_venv/
 Datasets/ITErpretability/
 catboost_info/
 __pycache__/
-results/
+results/backup/
+results/data_results/
+results/old_results/
+results/train_as_shapley_values/
+results/processed_results/
+notebooks/CATE_synthetic.ipynb
+notebooks/causal_graph_causalteshap.ipynb
