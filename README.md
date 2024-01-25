@@ -10,7 +10,7 @@
 
 ## Installation ⚙️
 
-UNDER CONSTRUCTION
+UNDER CONSTRUCTION, PIP DOES NOT WORK YET
 | [**pip**](https://pypi.org/project/causalteshap/) | `pip install causalteshap` | 
 | ---| ----|
 
@@ -44,18 +44,21 @@ causalteshap_object.get_analysis_df()  # Reduce the dataset to the selected feat
 
 ## Benchmarks ⏱
 
-UNDER CONSTRUCTION
-Check out our benchmark results [here](examples/results/).  
+Check out our benchmark results [here](examples/results/figures/).  
 
 ## How does it work ⁉️
 
-UNDER CONSTRUCTION
+Causalteshap uses an introduced noise feature and statistical tests to determine whether a feature is prognostic (i.e. only contributing to the output) or predictive (i.e. explaining the effect of a treatment). First, we train an S-learner on the data. Then we use Shapley values to explain the attribution of the features of the S-learner, into two cases, one where the treatment is set to 0 ($S_0$) and one where it is set to 1 ($S_1$), including the introduced noise feature. Then the S-learner Shapley values are $S = S_1 - S_0$. Ideally, a purely prognostic feature X will have a S equal to zero. However, the SHAP library, especially treeSHAP, tends to also attribute importance to noise. Therefore, simply comparing $S$ to zero is not guaranteed to work. Therefore,  CausalteShap uses a two-part approach to deal with noise:
+- If the feature is purely prognostic, then the $S_0$ and $S_1$ distribution should have the same variance and same mean. This is done using both the Fligner and the student t-test with unequal variance.
+- When these distributions are different and the feature is truly prognostic, then $|S(X_{noisy}|$ of a known noise variable $X_{noisy}$ that contains no information should be larger or equal compared to $|S_{0}(X)|$. This covers the cases where these differences would be caused by noise. This is done using the Kolmogorov-Smirnov test.
+
+If a feature passes both parts, i.e. significant result on both the KS-test and either the t-test or Fligner test (that tests whether either the mean and or variance is different), we determine the feature to be predictive. In the case any of the parts fail, the feature is flagged as prognostic.
 
 ## Referencing our package :memo:
 
-If you use *causalteshap* in a scientific publication, we would highly appreciate citing us as:
+If you use *causalteshap* in a scientific publication, we would highly appreciate citing us.
 
-UNDER CONSTRUCTION
+SCIENTIFIC PAPER UNDER REVIEW
 
 ---
 
