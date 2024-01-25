@@ -246,6 +246,39 @@ class CatboostExplainer(ShapExplainer):
 
             return T1_explainer.shap_values(X_do1), T0_explainer.shap_values(X_do0)
         
+                
+        elif meta_learner == "X":
+            T1_model = self.model.copy().set_params(random_seed=random_seed)
+            T0_model = self.model.copy().set_params(random_seed=random_seed)
+
+            T1_train_mask = (X_train["T"]==1).values
+            T1_val_mask = (X_val["T"]==1).values
+
+            T0_train_mask = (X_train["T"]==0).values
+            T0_val_mask = (X_val["T"]==0).values
+
+            X_train_X = X_train.copy(deep=True).drop(columns=["T"])
+            X_val_X = X_val.copy(deep=True).drop(columns=["T"])
+
+            T1_model.fit(X_train_X[T1_train_mask], 
+                         Y_train[T1_train_mask], 
+                         eval_set=(X_val_X[T1_val_mask], Y_val[T1_val_mask]))
+            T0_model.fit(X_train_X[T0_train_mask], 
+                         Y_train[T0_train_mask], 
+                         eval_set=(X_val_X[T0_val_mask], Y_val[T0_val_mask]))
+            
+            d0_hat = T1_model.predict(X_train_X[T0_train_mask]) - Y_train[T0_train_mask]
+            d1_hat = Y_train[T1_train_mask] - T0_model.predict(X_train_X[T1_train_mask])
+
+            cate_model = self.model.copy().set_params(use_best_model=False,random_seed=random_seed)
+            cate_model.fit(pd.concat([X_train[T0_train_mask].drop(columns=["T"]),X_train[T1_train_mask].drop(columns=["T"])]),np.append(d0_hat,d1_hat))
+
+            # Calculate the shap values
+            cate_explainer = shap.TreeExplainer(cate_model)
+
+            # return cate_explainer.shap_values(X_val_X), np.tile(np.reshape(cate_explainer.shap_values(X_val_X)[:,-1],(-1,1)),(1,len(X_val_X.columns.values)))
+            return cate_explainer.shap_values(X_val_X), np.tile(np.reshape(np.repeat(0,len(X_val_X)),(-1,1)),(1,len(X_val_X.columns.values)))
+        
         else:
             raise NotImplementedError 
         
@@ -383,7 +416,7 @@ class EnsembleExplainer(ShapExplainer):
             T0_explainer = shap.TreeExplainer(T0_model)
 
             return T1_explainer.shap_values(X_do1), T0_explainer.shap_values(X_do0)
-        
+
         else:
             raise NotImplementedError 
 

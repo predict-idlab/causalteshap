@@ -1,5 +1,6 @@
 __pycache__/causalteshap.cpython-38.pyc
-Datasets/
+Datasets/ITErpretability_venv/
+Datasets/ITErpretability/
 catboost_info/
 __pycache__/
 results/

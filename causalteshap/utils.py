@@ -95,32 +95,32 @@ def causalteshap_analysis(
         )
 
         #######################################################################################################################################
-        # import matplotlib.pyplot as plt
+        import matplotlib.pyplot as plt
 
-        # plot_bins = 100#100
+        plot_bins = 100#100
 
-        # if i <= len_features-2:
+        if i <= len_features-2:
 
-        #     plot_1_max = np.max(np.abs(pred_matrix_list[:,i]))
-        #     plot_1_min = np.min(np.abs(pred_matrix_list[:,-1]))
-        #     # plot_1_max = np.max(pred_matrix_list[:-1,i])
-        #     # plot_1_min = np.min(pred_matrix_list[1:,-1])
+            plot_1_max = np.max(np.abs(pred_matrix_list[:,i]))
+            plot_1_min = np.min(np.abs(pred_matrix_list[:,-1]))
+            # plot_1_max = np.max(pred_matrix_list[:-1,i])
+            # plot_1_min = np.min(pred_matrix_list[1:,-1])
 
-        #     fig, axs = plt.subplots(1,2,figsize=(20,6))
-        #     axs[0].hist(np.abs(pred_matrix_list[:,i]),label="tested",bins=np.arange(plot_1_min,plot_1_max,(plot_1_max-plot_1_min)/plot_bins),density=True)
-        #     axs[0].hist(np.abs(pred_matrix_list[:,-1]),label="random_subtr",alpha=0.5,bins=np.arange(plot_1_min,plot_1_max,(plot_1_max-plot_1_min)/plot_bins),density=True)
-        #     # axs[0].hist(pred_matrix_list[:-1,i],label="tested",bins=np.arange(plot_1_min,plot_1_max,(plot_1_max-plot_1_min)/plot_bins),density=True)
-        #     # axs[0].hist(pred_matrix_list[1:,-1],label="random_subtr",alpha=0.5,bins=np.arange(plot_1_min,plot_1_max,(plot_1_max-plot_1_min)/plot_bins),density=True)
-        #     axs[0].legend()
-        #     axs[0].set_title(str(i) + " | Random subtr vs tested subtr | condition = "+str(comp_D_ks))
+            fig, axs = plt.subplots(1,2,figsize=(20,6))
+            axs[0].hist(np.abs(pred_matrix_list[:,i]),label="tested",bins=np.arange(plot_1_min,plot_1_max,(plot_1_max-plot_1_min)/plot_bins),density=True)
+            axs[0].hist(np.abs(pred_matrix_list[:,-1]),label="random_subtr",alpha=0.5,bins=np.arange(plot_1_min,plot_1_max,(plot_1_max-plot_1_min)/plot_bins),density=True)
+            # axs[0].hist(pred_matrix_list[:-1,i],label="tested",bins=np.arange(plot_1_min,plot_1_max,(plot_1_max-plot_1_min)/plot_bins),density=True)
+            # axs[0].hist(pred_matrix_list[1:,-1],label="random_subtr",alpha=0.5,bins=np.arange(plot_1_min,plot_1_max,(plot_1_max-plot_1_min)/plot_bins),density=True)
+            axs[0].legend()
+            axs[0].set_title(str(i) + " | Random subtr vs tested subtr | condition = "+str(comp_D_ks))
 
-        #     plot_2_max = np.max(np.abs(T1_matrix_list[:,i]))
-        #     plot_2_min = np.min(np.abs(T0_matrix_list[:,i]))
+            plot_2_max = np.max(np.abs(T1_matrix_list[:,i]))
+            plot_2_min = np.min(np.abs(T0_matrix_list[:,i]))
 
-        #     axs[1].hist(np.abs(T1_matrix_list[:,i]),label="T1",bins=np.arange(plot_2_min,plot_2_max,(plot_2_max-plot_2_min)/plot_bins))
-        #     axs[1].hist(np.abs(T0_matrix_list[:,i]),label="T0",alpha=0.5,bins=np.arange(plot_2_min,plot_2_max,(plot_2_max-plot_2_min)/plot_bins))
-        #     axs[1].legend()
-        #     axs[1].set_title(str(i) + " | T1 vs T0 (abs) | p_value = "+str(p_value_ttest))
+            axs[1].hist(np.abs(T1_matrix_list[:,i]),label="T1",bins=np.arange(plot_2_min,plot_2_max,(plot_2_max-plot_2_min)/plot_bins))
+            axs[1].hist(np.abs(T0_matrix_list[:,i]),label="T0",alpha=0.5,bins=np.arange(plot_2_min,plot_2_max,(plot_2_max-plot_2_min)/plot_bins))
+            axs[1].legend()
+            axs[1].set_title(str(i) + " | T1 vs T0 (abs) | ttest = "+str(p_value_ttest)+" | fligner = "+str(p_value_fligner))
         #######################################################################################################################################
 
         # Calculate the percentage mean difference between the Shapley values of the T1 case and the T0 case
